@@ -84,7 +84,10 @@
     (let [options (merge default-options options)
           client (blob-client (:tech.azure.blob/account-name options)
                               (:tech.azure.blob/account-key options))
-          containers (.listContainers client)]
+
+          containers (if-let [container-name (url-parts->container url-parts)]
+                       [(.getContainerReference client container-name)]
+                       (.listContainers client))]
       (->> containers
            (mapcat
             (fn [^CloudBlobContainer container]
@@ -95,9 +98,10 @@
                         {:url (str "azb://" (.getName container)
                                    "/"
                                    (.getName blob))
+                         :length (-> (.getProperties blob)
+                                     (.getLength))
                          :public-url (-> (.getUri blob)
-                                         (.toString))})))))))))
-  )
+                                         (.toString))}))))))))))
 
 
 (defn blob-provider
@@ -108,8 +112,6 @@
 (defmethod io-prot/url-parts->provider :azb
   [& args]
   (blob-provider))
-
-
 
 (comment
   (require '[tech.io.azure.auth :as azure-auth])
