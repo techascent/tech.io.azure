@@ -5,7 +5,7 @@
             :url "https://www.eclipse.org/legal/epl-2.0/"}
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [com.microsoft.azure/azure-storage "8.3.0"]
-                 [techascent/tech.io "3.0"]]
+                 [techascent/tech.io "3.1"]]
   :profiles {:dev {:dependencies [[amperity/vault-clj "0.7.0"]
                                   [ch.qos.logback/logback-classic "1.1.3"]]}}
   :repositories {"releases"  {:url "s3p://techascent.jars/releases/"

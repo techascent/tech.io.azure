@@ -7,7 +7,7 @@
             [tech.io.azure.auth :as azure-auth]
             [tech.config.core :as config])
   (:import [com.microsoft.azure.storage.blob CloudBlobClient CloudBlobContainer
-            CloudBlob CloudBlockBlob]
+            CloudBlob CloudBlockBlob CloudBlobDirectory]
            [com.microsoft.azure.storage
             StorageUri StorageCredentials StorageCredentialsAccountAndKey
             CloudStorageAccount]
@@ -57,6 +57,23 @@
                       {})))
     blob))
 
+(defn- blob->metadata-seq
+  [recursive? container-name blob]
+  (cond
+    (instance? CloudBlob blob)
+    (let [^CloudBlob blob blob]
+      [{:url (str "azb://" container-name
+                  "/"
+                  (.getName blob))
+        :byte-length (-> (.getProperties blob)
+                         (.getLength))
+        :public-url (-> (.getUri blob)
+                        (.toString))}])
+    (and recursive?
+         (instance? CloudBlobDirectory blob))
+    (->> (.listBlobs ^CloudBlobDirectory blob)
+         (mapcat (partial blob->metadata-seq recursive? container-name)))))
+
 
 (defrecord BlobProvider [default-options]
   io-prot/IOProvider
@@ -91,25 +108,21 @@
       (->> containers
            (mapcat
             (fn [^CloudBlobContainer container]
-              (let [blobs (.listBlobs container)]
-                (->> blobs
-                     (map
-                      (fn [^CloudBlob blob]
-                        {:url (str "azb://" (.getName container)
-                                   "/"
-                                   (.getName blob))
-                         :byte-length (-> (.getProperties blob)
-                                          (.getLength))
-                         :public-url (-> (.getUri blob)
-                                         (.toString))})))))))))
+              (->> (.listBlobs container)
+                   (mapcat (partial blob->metadata-seq
+                                    (:recursive? options)
+                                    (.getName container))))))
+           (remove nil?))))
   (metadata [provider url-parts options]
-    (let [properties (-> (opts->client default-options options)
+    (let [blob (-> (opts->client default-options options)
                          second
-                         (url-parts->blob url-parts :blob-must-exist? true)
-                         (.getProperties))]
+                         (url-parts->blob url-parts :blob-must-exist? true))
+          properties (.getProperties blob)]
       {:byte-length (.getLength properties)
        :modify-date (.getLastModified properties)
-       :create-data (.getCreatedTime properties)}))
+       :create-date (.getCreatedTime properties)
+       :public-url (-> (.getUri blob)
+                       (.toString))}))
 
   io-prot/ICopyObject
   (get-object [provider url-parts options]
