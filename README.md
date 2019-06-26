@@ -4,7 +4,7 @@ Azure bindings for tech.io
 
 ## Usage
 
-You can turn vault auth on or of in the main io config:
+You can turn vault auth on or off in the main io config:
 
 * [io configuration](https://github.com/techascent/tech.io/blob/master/resources/io-config.edn)
 
