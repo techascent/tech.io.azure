@@ -1,4 +1,4 @@
-(defproject tech.io.azure "3.1-1-SNAPSHOT"
+(defproject techascent/tech.io.azure "3.1-2"
   :description "Bindings to at least blob storage for tech.io system."
   :url "http://github.com/techascent/tech.io.azure"
   :license {:name "EPL-2.0"
