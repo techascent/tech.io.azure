@@ -36,8 +36,12 @@
 (defn- opts->client
   [default-options options]
   (let [options (merge default-options options)
-        client (blob-client (:tech.azure.blob/account-name options)
-                            (:tech.azure.blob/account-key options))]
+        ;;Use environment variable fallback if not provided by options.
+        account-name (or (:tech.azure.blob/account-name options)
+                         (config/unchecked-get-config :azure-blob-account-name))
+        account-key (or (:tech.azure.blob/account-key options)
+                        (config/unchecked-get-config :azure-blob-account-key))
+        client (blob-client account-name account-key)]
     [options client]))
 
 
