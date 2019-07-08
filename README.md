@@ -12,6 +12,11 @@ You can choose the vault key here:
 
 * [configuration](resources/azure-io-config.edn)
 
+If you don't want to use vault or if you want to export environment variables to
+you environment (in a docker scenario, for instance), the system will look for:
+* `AZURE_BLOB_ACCOUNT_NAME` - name of the account.
+* `AZURE_BLOB_ACCOUNT_KEY` - key of the account.
+
 
 The shape of the vault entry must be:
 ```console
