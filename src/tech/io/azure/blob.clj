@@ -31,7 +31,8 @@
 
 (defn url-parts->path
   [{:keys [path]}]
-  (s/join "/" (rest path)))
+  (when (seq (rest path))
+    (s/join "/" (rest path))))
 
 (defn- opts->client
   [default-options options]
@@ -106,17 +107,25 @@
   (ls [provider url-parts options]
     (let [[options client] (opts->client default-options options)
           ^CloudBlobClient client client
-          containers (if-let [container-name (url-parts->container url-parts)]
-                       [(.getContainerReference client container-name)]
-                       (.listContainers client))]
-      (->> containers
-           (mapcat
-            (fn [^CloudBlobContainer container]
-              (->> (.listBlobs container)
-                   (mapcat (partial blob->metadata-seq
-                                    (:recursive? options)
-                                    (.getName container))))))
-           (remove nil?))))
+          container-name (url-parts->container url-parts)
+          path-data (url-parts->path url-parts)]
+      (if-not path-data
+        (let [containers (if-let [container-name (url-parts->container url-parts)]
+                           [(.getContainerReference client container-name)]
+                           (.listContainers client))]
+          (->> containers
+               (mapcat
+                (fn [^CloudBlobContainer container]
+                  (->> (.listBlobs container)
+                       (mapcat (partial blob->metadata-seq
+                                        (:recursive? options)
+                                        (.getName container))))))
+               (remove nil?)))
+        (let [container (.getContainerReference client container-name)]
+          (->> (.listBlobs container path-data true)
+               (mapcat (partial blob->metadata-seq
+                                (:recursive? options)
+                                (.getName container))))))))
   (metadata [provider url-parts options]
     (let [blob (-> (opts->client default-options options)
                          second
