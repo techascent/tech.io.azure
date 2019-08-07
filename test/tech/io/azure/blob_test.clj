@@ -22,11 +22,13 @@
                  set)))
       (let [non-rec-ls (io/ls "azb://test-container/")
             rec-ls (io/ls "azb://test-container/" :recursive? true)]
-        (is (< (count non-rec-ls)
+        (println non-rec-ls)
+        (println rec-ls)
+        (is (= (count non-rec-ls)
                (count rec-ls)))
         (is (= #{:url :byte-length :public-url}
                (->> (keys (first rec-ls))
                     set)))
         (io/delete! blob-url)
-        (is (= (count non-rec-ls)
+        (is (= (- (count non-rec-ls) 1)
                (count (io/ls "azb://test-container" :recursive? true))))))))

@@ -20,7 +20,7 @@ you environment (in a docker scenario, for instance), the system will look for:
 
 The shape of the vault entry must be:
 ```console
-chrisn@chrisn-lt-2:~/dev/tech.all/tech.io.azure$ vault read "techascent/fathym-azure"
+chrisn@chrisn-lt-2:~/dev/tech.all/tech.io.azure$ vault read "techascent/test-azure-access"
 Key                        Value
 ---                        -----
 refresh_interval           768h

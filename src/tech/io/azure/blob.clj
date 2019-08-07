@@ -74,10 +74,12 @@
                          (.getLength))
         :public-url (-> (.getUri blob)
                         (.toString))}])
-    (and recursive?
-         (instance? CloudBlobDirectory blob))
-    (->> (.listBlobs ^CloudBlobDirectory blob)
-         (mapcat (partial blob->metadata-seq recursive? container-name)))))
+    (instance? CloudBlobDirectory blob)
+    (if recursive?
+      (->> (.listBlobs ^CloudBlobDirectory blob)
+           (mapcat (partial blob->metadata-seq recursive? container-name)))
+      [{:url (str "azb://" container-name "/" (.getPrefix ^CloudBlobDirectory blob))
+        :directory? true}])))
 
 
 (defrecord BlobProvider [default-options]
