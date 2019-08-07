@@ -62,6 +62,10 @@
                       {})))
     blob))
 
+(defn- is-directory?
+  [blob]
+    (instance? CloudBlobDirectory blob))
+
 (defn- blob->metadata-seq
   [recursive? container-name blob]
   (cond
@@ -74,7 +78,7 @@
                          (.getLength))
         :public-url (-> (.getUri blob)
                         (.toString))}])
-    (instance? CloudBlobDirectory blob)
+    (is-directory? blob)
     (if recursive?
       (->> (.listBlobs ^CloudBlobDirectory blob)
            (mapcat (partial blob->metadata-seq recursive? container-name)))
@@ -123,11 +127,19 @@
                                         (:recursive? options)
                                         (.getName container))))))
                (remove nil?)))
-        (let [container (.getContainerReference client container-name)]
-          (->> (.listBlobs container path-data true)
-               (mapcat (partial blob->metadata-seq
-                                (:recursive? options)
-                                (.getName container))))))))
+        (let [container (.getContainerReference client container-name)
+              target-blob (url-parts->blob client url-parts :blob-must-exist? false)
+              dir-blob (.getDirectoryReference container (url-parts->path url-parts))]
+          (cond
+            (.exists target-blob)
+            (blob->metadata-seq (:recursive? options)
+                                (.getName container)
+                                target-blob)
+            :else
+            (->> (.listBlobs ^CloudBlobDirectory dir-blob)
+                 (mapcat (partial blob->metadata-seq
+                                  (:recursive? options)
+                                  (.getName container)))))))))
   (metadata [provider url-parts options]
     (let [blob (-> (opts->client default-options options)
                          second
