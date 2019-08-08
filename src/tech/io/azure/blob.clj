@@ -5,7 +5,8 @@
             [tech.io :as io]
             [tech.io.auth :as io-auth]
             [tech.io.azure.auth :as azure-auth]
-            [tech.config.core :as config])
+            [tech.config.core :as config]
+            [clojure.tools.logging :as log])
   (:import [com.microsoft.azure.storage.blob CloudBlobClient CloudBlobContainer
             CloudBlob CloudBlockBlob CloudBlobDirectory]
            [com.microsoft.azure.storage
@@ -42,6 +43,13 @@
                          (config/unchecked-get-config :azure-blob-account-name))
         account-key (or (:tech.azure.blob/account-key options)
                         (config/unchecked-get-config :azure-blob-account-key))
+        _ (when (or (= 0 (count account-name))
+                    (= 0 (count account-key)))
+            (throw (ex-info
+                    (format "Could not find account name (%s) or account key %s
+Consider setting environment variables AZURE_BLOB_ACCOUNT_NAME and AZURE_BLOB_ACCOUNT_KEY"
+                            account-name account-key)
+                    {})))
         client (blob-client account-name account-key)]
     [options client]))
 
