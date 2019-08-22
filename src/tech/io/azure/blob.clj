@@ -18,11 +18,23 @@
 (set! *warn-on-reflection* true)
 
 (defn blob-client
-  ^CloudBlobClient [^String account-name ^String account-key]
-  (-> (StorageCredentialsAccountAndKey. account-name account-key)
-      ;;true means to use https
-      (CloudStorageAccount. true)
-      (.createCloudBlobClient)))
+  ^CloudBlobClient [& [options]]
+  (let [account-name (or (:tech.azure.blob/account-name options)
+                         (config/unchecked-get-config :azure-blob-account-name))
+        account-key (or (:tech.azure.blob/account-key options)
+                        (config/unchecked-get-config :azure-blob-account-key))
+        _ (when (or (= 0 (count account-name))
+                    (= 0 (count account-key)))
+            (throw (ex-info
+                    (format "Could not find account name (%s) or account key %s
+Consider setting environment variables AZURE_BLOB_ACCOUNT_NAME and AZURE_BLOB_ACCOUNT_KEY"
+                            account-name account-key)
+                    {})))]
+    (-> (StorageCredentialsAccountAndKey. ^String account-name
+                                          ^String account-key)
+        ;;true means to use https
+        (CloudStorageAccount. true)
+        (.createCloudBlobClient))))
 
 
 (defn url-parts->container
@@ -39,29 +51,28 @@
   [default-options options]
   (let [options (merge default-options options)
         ;;Use environment variable fallback if not provided by options.
-        account-name (or (:tech.azure.blob/account-name options)
-                         (config/unchecked-get-config :azure-blob-account-name))
-        account-key (or (:tech.azure.blob/account-key options)
-                        (config/unchecked-get-config :azure-blob-account-key))
-        _ (when (or (= 0 (count account-name))
-                    (= 0 (count account-key)))
-            (throw (ex-info
-                    (format "Could not find account name (%s) or account key %s
-Consider setting environment variables AZURE_BLOB_ACCOUNT_NAME and AZURE_BLOB_ACCOUNT_KEY"
-                            account-name account-key)
-                    {})))
-        client (blob-client account-name account-key)]
+        client (blob-client options)]
     [options client]))
+
+
+(defn ensure-container!
+  ^CloudBlobContainer [^CloudBlobClient client container-name]
+  (let [container (.getContainerReference client container-name)]
+    (.createIfNotExists container)
+    container))
 
 
 (defn- url-parts->blob
   ^CloudBlockBlob [^CloudBlobClient client
-                   url-parts & {:keys [blob-must-exist?]}]
+                   url-parts & {:keys [blob-must-exist?
+                                       create-container?]}]
   (let [container-name (url-parts->container url-parts)
         container (.getContainerReference client container-name)
         _ (when (not (.exists container))
-            (throw (ex-info (format "Container does not exist: %s" container-name)
-                            {})))
+            (if (not create-container?)
+              (throw (ex-info (format "Container does not exist: %s" container-name)
+                              {}))
+              (.createIfNotExists container)))
         blob (.getBlockBlobReference container (url-parts->path url-parts))]
     (when (and blob-must-exist?
                (not (.exists blob)))
@@ -69,6 +80,7 @@ Consider setting environment variables AZURE_BLOB_ACCOUNT_NAME and AZURE_BLOB_AC
                                                          url-parts))
                       {})))
     blob))
+
 
 (defn- is-directory?
   [blob]
@@ -102,10 +114,12 @@ Consider setting environment variables AZURE_BLOB_ACCOUNT_NAME and AZURE_BLOB_AC
         (url-parts->blob url-parts :blob-must-exist? true)
         (.openInputStream)))
   (output-stream! [provider url-parts options]
-    (-> (opts->client default-options options)
-        second
-        (url-parts->blob url-parts :blob-must-exist? false)
-        (.openOutputStream)))
+    (let [[options client] (opts->client default-options options)]
+      (-> client
+          (url-parts->blob url-parts
+                           :blob-must-exist? false
+                           :create-container? (:create-container? options))
+          (.openOutputStream))))
   (exists? [provider url-parts options]
     (-> (opts->client default-options options)
         second
