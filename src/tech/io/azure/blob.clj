@@ -179,7 +179,9 @@ Consider setting environment variables AZURE_BLOB_ACCOUNT_NAME and AZURE_BLOB_AC
   (put-object! [provider url-parts value options]
     (let [blob (-> (opts->client default-options options)
                    second
-                   (url-parts->blob url-parts :blob-must-exist? false))]
+                   (url-parts->blob url-parts
+                                    :blob-must-exist? false
+                                    :create-container? (:create-container? options)))]
       (cond
         (instance? (Class/forName "[B") value)
         (.uploadFromByteArray blob ^bytes value 0
