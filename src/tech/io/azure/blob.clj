@@ -109,17 +109,42 @@ Consider setting environment variables AZURE_BLOB_ACCOUNT_NAME and AZURE_BLOB_AC
 (defrecord BlobProvider [default-options]
   io-prot/IOProvider
   (input-stream [provider url-parts options]
-    (-> (opts->client default-options options)
-        second
-        (url-parts->blob url-parts :blob-must-exist? true)
-        (.openInputStream)))
+    (let [^InputStream istream
+          (-> (opts->client default-options options)
+              second
+              (url-parts->blob url-parts :blob-must-exist? true)
+              (.openInputStream))
+          closer (delay (.close istream))]
+      ;;These @#$@#$ streams throw exception upon double close
+      ;;which doesn't follow java conventions in other places.
+      (proxy [InputStream] []
+        (available [] (.available istream))
+        (close [] @closer)
+ 	(mark [readlimit] (.mark istream readlimit))
+        (markSupported [] (.markSupported istream))
+        (read
+          ([] (.read istream))
+          ([b] (.read istream b))
+          ([b off len] (.read istream b off len)))
+       	(reset [] (.reset istream))
+ 	(skip [n] (.skip istream n)))))
   (output-stream! [provider url-parts options]
-    (let [[options client] (opts->client default-options options)]
-      (-> client
-          (url-parts->blob url-parts
-                           :blob-must-exist? false
-                           :create-container? (:create-container? options))
-          (.openOutputStream))))
+    (let [[options client] (opts->client default-options options)
+          ^OutputStream ostream
+          (-> client
+              (url-parts->blob url-parts
+                               :blob-must-exist? false
+                               :create-container? (:create-container? options))
+              (.openOutputStream))
+          closer (delay (.close ostream))]
+      (proxy [OutputStream] []
+        (close [] @closer)
+        (flush [] (.flush ostream))
+        (write
+          ([b off len] (.write ostream b off len))
+          ([b] (if (number? b)
+                 (.write ostream (int b))
+                 (.write ostream ^bytes b)))))))
   (exists? [provider url-parts options]
     (-> (opts->client default-options options)
         second
