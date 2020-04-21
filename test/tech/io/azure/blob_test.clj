@@ -15,6 +15,7 @@
       (try
         (io/delete! blob-url)
         (catch Throwable e nil))
+      (az-blob/ensure-container! "test-container")
       (io/copy "project.clj" "azb://test-container/projects/blob.clj")
       (is (= #{:byte-length :modify-date :create-date :public-url}
              (-> (io/metadata "azb://test-container/projects/blob.clj")

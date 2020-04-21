@@ -56,10 +56,14 @@ Consider setting environment variables AZURE_BLOB_ACCOUNT_NAME and AZURE_BLOB_AC
 
 
 (defn ensure-container!
-  ^CloudBlobContainer [^CloudBlobClient client container-name]
-  (let [container (.getContainerReference client container-name)]
-    (.createIfNotExists container)
-    container))
+  (^CloudBlobContainer [^CloudBlobClient client container-name]
+   (let [container (.getContainerReference client container-name)]
+     (.createIfNotExists container)
+     container))
+  (^CloudBlobContainer [container-name]
+   (ensure-container! (second
+                       (opts->client (azure-auth/vault-azure-blob-creds) {}))
+                      container-name)))
 
 
 (defn- url-parts->blob

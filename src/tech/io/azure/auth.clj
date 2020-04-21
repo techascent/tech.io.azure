@@ -5,16 +5,20 @@
             [tech.io.protocols :as io-prot]))
 
 
-(defn vault-azure-blob-creds
-  [vault-path options]
-  (let [{:keys [azure-blob-account-key
-                azure-blob-account-name]}
-        (io-auth/read-credentials vault-path)]
-    {:tech.azure.blob/account-key azure-blob-account-key
-     :tech.azure.blob/account-name azure-blob-account-name}))
-
 (def azure-auth-required-keys
   [:tech.azure.blob/account-key :tech.azure.blob/account-name])
+
+
+(defn vault-azure-blob-creds
+  ([vault-path options]
+   (let [{:keys [azure-blob-account-key
+                 azure-blob-account-name]}
+         (io-auth/read-credentials vault-path)]
+     {:tech.azure.blob/account-key azure-blob-account-key
+      :tech.azure.blob/account-name azure-blob-account-name}))
+  ([]
+   (let [vault-path (config/get-config :tech-azure-blob-vault-path)]
+     (vault-azure-blob-creds vault-path {}))))
 
 
 (defn azure-blob-auth-provider
