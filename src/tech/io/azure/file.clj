@@ -5,6 +5,7 @@
             [tech.io.auth :as io-auth]
             [tech.io.azure.auth :as azure-auth]
             [tech.io.azure.storage-account :as azure-storage-account]
+            [tech.config.core :as config]
             [clojure.tools.logging :as log]
             [clojure.string :as s])
   (:import [com.microsoft.azure.storage.file
@@ -28,9 +29,8 @@
 
 
 (defn- opts->client
-  ^CloudFileClient
   [default-options options]
-  (file-client (merge default-options options)))
+  [options (file-client (merge default-options options))])
 
 
 (defn ensure-share!
@@ -50,9 +50,9 @@
   (when (seq (rest path))
     (s/join "/" (rest path))))
 
-(defn- url-parts->blob
+(defn- url-parts->file
   ^CloudFile [^CloudFileClient client
-              url-parts & {:keys [blob-must-exist?
+              url-parts & {:keys [file-must-exist?
                                   create-container?]}]
   (let [container-name (url-parts->container url-parts)
         container (.getShareReference client container-name)
@@ -62,17 +62,17 @@
                               {}))
               (.createIfNotExists container)))
         root-dir (.getRootDirectoryReference container)
-        blob (.getFileReference root-dir (url-parts->path url-parts))]
-    (when (and blob-must-exist?
-               (not (.exists blob)))
-      (throw (ex-info (format "Blob does not exist: %s" (url/parts->url
+        file (.getFileReference root-dir (url-parts->path url-parts))]
+    (when (and file-must-exist?
+               (not (.exists file)))
+      (throw (ex-info (format "File does not exist: %s" (url/parts->url
                                                          url-parts))
                       {})))
-    blob))
+    file))
 
 (defn- is-directory?
-  [blob]
-  (instance? CloudFileDirectory blob))
+  [file]
+  (instance? CloudFileDirectory file))
 
 
 (defn- parent-seq
@@ -81,49 +81,63 @@
     (cons item (lazy-seq (parent-seq (.getParent item))))))
 
 
+(defn- last-name
+  [^ListFileItem item]
+  (cond
+    (instance? CloudFile item)
+    (last (s/split (.getName ^CloudFile item) #"/"))
+    (instance? CloudFileDirectory item)
+    (last (s/split (.getName ^CloudFileDirectory item) #"/"))
+    :else
+    (throw (Exception. "Type failure in last-name"))))
+
+
 (defn- get-full-name
-  [blob]
+  [file]
   (cond
-    (instance? CloudFile blob)
-    (.getName ^CloudFile blob)
-    (instance? CloudFileDirectory blob)
-    (str
-     (->> (parent-seq blob)
-          (reverse)
-          (map #(.getName ^CloudFileDirectory %))
-          (s/join "/"))
-     "/")))
+    (instance? CloudFile file)
+    (str (get-full-name
+          (.getParent ^CloudFile file))
+         (last-name file))
+    (instance? CloudFileDirectory file)
+    (when-let [name-seq (->> (parent-seq file)
+                             (reverse)
+                             (map #(last-name %))
+                             (remove empty?)
+                             (seq))]
+      (str (s/join "/" name-seq) "/"))))
 
 
-(defn- blob->metadata-seq
-  [recursive? container-name blob]
+(defn- file->metadata-seq
+  [recursive? container-name file]
   (cond
-    (instance? CloudFile blob)
-    (let [^CloudFile blob blob]
+    (instance? CloudFile file)
+    (let [^CloudFile file file]
       [{:url (str "azf://" container-name
                   "/"
-                  (.getName blob))
-        :byte-length (-> (.getProperties blob)
+                  (get-full-name file))
+        :byte-length (-> (.getProperties file)
                          (.getLength))
-        :public-url (-> (.getUri blob)
+        :public-url (-> (.getUri file)
                         (.toString))}])
-    (is-directory? blob)
+    (is-directory? file)
     (if recursive?
-      (->> (.listFilesAndDirectories ^CloudFileDirectory blob)
-           (mapcat (partial blob->metadata-seq recursive? container-name)))
-      [{:url (str "azf://" container-name (get-full-name blob))
+      (->> (.listFilesAndDirectories ^CloudFileDirectory file)
+           (mapcat (partial file->metadata-seq recursive? container-name)))
+      [{:url (str "azf://" container-name "/" (get-full-name file))
         :directory? true}])
     :else
     (throw (Exception. (format "Failed to recognized %s"
-                               (type blob))))))
+                               (type file))))))
 
-(deftype BlobProvider [default-options]
+
+(deftype FileProvider [default-options]
   io-prot/IOProvider
   (input-stream [provider url-parts options]
     (let [^InputStream istream
           (-> (opts->client default-options options)
               second
-              (url-parts->blob url-parts :blob-must-exist? true)
+              (url-parts->file url-parts :file-must-exist? true)
               (.openRead))
           closer (delay (.close istream))]
       ;;These @#$@#$ streams throw exception upon double close
@@ -144,18 +158,21 @@
           ;;We have to have the length to open the stream which means
           ;;this has to be delayed.  So writing terabyte files ain't
           ;;gonna work :-).
+          file-ref
+          (-> client
+              (url-parts->file url-parts
+                               :file-must-exist? false
+                               :create-container?
+                               (:create-container? options)))
           ostream (ByteArrayOutputStream.)
           closer
           (delay
            (let [byte-data (.toByteArray ostream)
-                 n-bytes (alength byte-data)
-                 fstream
-                 (-> client
-                     (url-parts->blob url-parts
-                                      :blob-must-exist? false
-                                      :create-container?
-                                      (:create-container? options)))]
-             (.uploadFromByteArray fstream byte-data 0 n-bytes)))]
+                 n-bytes (alength byte-data)]
+             (.uploadFromByteArray file-ref byte-data 0 n-bytes)))]
+      ;;The default we always wanted
+      (doseq [parent (reverse (parent-seq (.getParent file-ref)))]
+        (.createIfNotExists ^CloudFileDirectory parent))
       (proxy [OutputStream] []
         (close [] @closer)
         (flush [] (.flush ostream))
@@ -167,70 +184,88 @@
   (exists? [provider url-parts options]
     (-> (opts->client default-options options)
         second
-        (url-parts->blob url-parts :blob-must-exist? false)
+        (url-parts->file url-parts :file-must-exist? false)
         (.exists)))
   (delete! [provider url-parts options]
-    (let [blob (-> (opts->client default-options options)
+    (let [file (-> (opts->client default-options options)
                    second
-                   (url-parts->blob url-parts :blob-must-exist? false))]
-      (when (.exists blob)
-        (.delete blob))
+                   (url-parts->file url-parts :file-must-exist? false))]
+      (when (.exists file)
+        (.delete file))
       :ok))
   (ls [provider url-parts options]
     (let [[options client] (opts->client default-options options)
           ^CloudFileClient client client
           container-name (url-parts->container url-parts)
-          path-data (url-parts->path url-parts)]
+          path-data (url-parts->path url-parts)
+          recursive? (:recursive? options)
+          metadata-seq-fn (partial file->metadata-seq recursive? container-name)]
       (if-not path-data
-        (let [containers (if-let [container-name (url-parts->container url-parts)]
-                           [(.getShareReference client container-name)]
-                           (.listShares client))]
-          (->> containers
+        (if container-name
+          (->> (.getShareReference client container-name)
+               (.getRootDirectoryReference)
+               (.listFilesAndDirectories)
+               (mapcat metadata-seq-fn))
+          (->> (.listShares client)
                (mapcat
                 (fn [^CloudFileShare container]
-                  (->> (.getRootDirectoryReference container)
-                       (.listFilesAndDirectories)
-                       (mapcat (partial blob->metadata-seq
-                                        (:recursive? options)
-                                        (.getName container))))))
-               (remove nil?)))
+                  (concat
+                   [{:url (str "azf://" (.getName container))
+                     :directory? true}]
+                   (when recursive?
+                     (metadata-seq-fn (.getRootDirectoryReference container))))))))
         (let [container (-> (.getShareReference client container-name)
                             (.getRootDirectoryReference))
-              target-blob (url-parts->blob client url-parts :blob-must-exist? false)
-              dir-blob (.getDirectoryReference container (url-parts->path url-parts))]
+              target-file (url-parts->file client url-parts :file-must-exist? false)
+              dir-file (.getDirectoryReference container (url-parts->path url-parts))]
           (cond
-            (.exists target-blob)
-            (blob->metadata-seq (:recursive? options)
-                                (.getName container)
-                                target-blob)
+            (.exists target-file)
+            (metadata-seq-fn target-file)
             :else
-            (->> (.listFilesAndDirectories ^CloudFileDirectory dir-blob)
-                 (mapcat (partial blob->metadata-seq
-                                  (:recursive? options)
-                                  (.getName container)))))))))
+            (->> (.listFilesAndDirectories ^CloudFileDirectory dir-file)
+                 (mapcat metadata-seq-fn)))))))
   (metadata [provider url-parts options]
-    (let [blob (-> (opts->client default-options options)
+    (let [file (-> (opts->client default-options options)
                    second
-                   (url-parts->blob url-parts :blob-must-exist? true))
-          properties (.getProperties blob)]
+                   (url-parts->file url-parts :file-must-exist? true))
+          properties (.getProperties file)]
       {:byte-length (.getLength properties)
        :modify-date (.getLastModified properties)
-       :public-url (-> (.getUri blob)
+       :public-url (-> (.getUri file)
                        (.toString))}))
 
   io-prot/ICopyObject
   (get-object [provider url-parts options]
     (io-prot/input-stream provider url-parts options))
   (put-object! [provider url-parts value options]
-    (let [blob (-> (opts->client default-options options)
+    (let [file (-> (opts->client default-options options)
                    second
-                   (url-parts->blob url-parts
-                                    :blob-must-exist? false
+                   (url-parts->file url-parts
+                                    :file-must-exist? false
                                     :create-container? (:create-container? options)))]
       (cond
         (instance? (Class/forName "[B") value)
-        (.uploadFromByteArray blob ^bytes value 0
+        (.uploadFromByteArray file ^bytes value 0
                               (alength ^bytes value))
         :else
-        (let [file (io/file value)]
-          (.uploadFromFile blob (.getCanonicalPath file)))))))
+        (let [filedata (io/file value)]
+          (.uploadFromFile file (.getCanonicalPath filedata)))))))
+
+
+(defn create-default-azure-provider
+  []
+  (let [provider (FileProvider. {})]
+    (if (config/get-config :tech-io-vault-auth)
+      (io-auth/authenticated-provider
+       provider
+       (azure-auth/azure-blob-auth-provider))
+      provider)))
+
+
+(def ^:dynamic *default-azure-provider*
+  (create-default-azure-provider))
+
+
+(defmethod io-prot/url-parts->provider :azf
+  [& args]
+  *default-azure-provider*)
