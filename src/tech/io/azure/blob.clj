@@ -1,9 +1,9 @@
 (ns tech.io.azure.blob
-  (:require [tech.io.protocols :as io-prot]
-            [tech.io.url :as url]
+  (:require [tech.v3.io.protocols :as io-prot]
+            [tech.v3.io.url :as url]
             [clojure.string :as s]
-            [tech.io :as io]
-            [tech.io.auth :as io-auth]
+            [tech.v3.io :as io]
+            [tech.v3.io.auth :as io-auth]
             [tech.io.azure.auth :as azure-auth]
             [tech.io.azure.storage-account :as azure-storage-account]
             [tech.config.core :as config]

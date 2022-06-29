@@ -1,8 +1,8 @@
 (ns tech.io.azure.auth
   "Vault auth provider for azure."
-  (:require [tech.io.auth :as io-auth]
+  (:require [tech.v3.io.auth :as io-auth]
             [tech.config.core :as config]
-            [tech.io.protocols :as io-prot]))
+            [tech.v3.io.protocols :as io-prot]))
 
 
 (def azure-auth-required-keys

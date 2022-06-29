@@ -1,10 +1,10 @@
 (ns tech.io.azure.file
-  (:require [tech.io :as io]
-            [tech.io.protocols :as io-prot]
-            [tech.io.url :as url]
-            [tech.io.auth :as io-auth]
-            [tech.io.azure.auth :as azure-auth]
-            [tech.io.azure.storage-account :as azure-storage-account]
+  (:require [tech.v3.io :as io]
+            [tech.v3.io.protocols :as io-prot]
+            [tech.v3.io.url :as url]
+            [tech.v3.io.auth :as io-auth]
+            [tech.v3.io.azure.auth :as azure-auth]
+            [tech.v3.io.azure.storage-account :as azure-storage-account]
             [tech.config.core :as config]
             [clojure.tools.logging :as log]
             [clojure.string :as s])
