@@ -1,16 +1,15 @@
-(ns tech.io.azure.blob-test
+(ns tech.v3.io.azure.blob-test
   (:require [tech.v3.io :as io]
             [tech.v3.io.auth :as io-auth]
-            [tech.io.azure.auth :as azure-auth]
-            [tech.io.azure.blob :as az-blob]
+            [tech.v3.io.azure.auth :as azure-auth]
+            [tech.v3.io.azure.blob :as az-blob]
             [clojure.test :refer :all]))
 
-
 (deftest base-test
-  (with-bindings {#'az-blob/*default-azure-provider*
+  (with-bindings {#'az-blob/*default-v3-azure-provider*
                   (io-auth/authenticated-provider
-                   (az-blob/blob-provider {})
-                   (azure-auth/azure-blob-auth-provider))}
+                    (az-blob/blob-provider {})
+                    (azure-auth/azure-blob-auth-provider))}
     (let [blob-url "azb://test-container/projects/blob.clj"]
       (try
         (io/delete! blob-url)

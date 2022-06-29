@@ -1,0 +1,5 @@
+{:paths ["src"]
+ :deps {com.microsoft.azure/azure-storage {:mvn/version  "8.3.0"}
+        techascent/tech.io {:mvn/version "4.16"}}
+ :aliases {:dev {:extra-deps {amperity/vault-clj {:mvn/version "0.7.0"}
+                              ch.qos.logback/logback-classic {:mvn/version "1.1.3"}}}}}

@@ -1,1 +1,2 @@
-{:tech-azure-blob-vault-path "techascent/test-azure-access"}
+{:tech-azure-blob-vault-path "techascent/test-azure-access"
+ :tech-io-vault-auth 1}
